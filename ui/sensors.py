@@ -16,6 +16,47 @@ except Exception:
 class SensorsPanelMixin:
     # Sensors panel and polling.
 
+    def _read_int_file(self, path):
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                return int(handle.read().strip())
+        except Exception:
+            return None
+
+    def _find_cpu_energy_path(self):
+        candidates = []
+        for rapl_base in ("/sys/class/powercap", "/sys/devices/virtual/powercap"):
+            if not os.path.isdir(rapl_base):
+                continue
+            for root, _dirs, files in os.walk(rapl_base):
+                if "energy_uj" not in files:
+                    continue
+
+                score = 0
+                name_path = os.path.join(root, "name")
+                try:
+                    with open(name_path, "r", encoding="utf-8") as handle:
+                        name = handle.read().strip().lower()
+                except OSError:
+                    name = ""
+
+                # Prefer package-level domains when available.
+                if "package" in name:
+                    score += 10
+                if "intel-rapl" in root or "amd-rapl" in root:
+                    score += 2
+
+                energy_path = os.path.join(root, "energy_uj")
+                candidates.append((score, energy_path))
+
+        if not candidates:
+            return None, None
+
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        energy_path = candidates[0][1]
+        max_range = self._read_int_file(os.path.join(os.path.dirname(energy_path), "max_energy_range_uj"))
+        return energy_path, max_range
+
     def _find_hwmon_power_path(self, name_keys):
         base = "/sys/class/hwmon"
         if not os.path.isdir(base):
@@ -41,7 +82,9 @@ class SensorsPanelMixin:
 
         self._power_sources_ready = True
         self._cpu_energy_path = None
+        self._cpu_energy_max_uj = None
         self._cpu_power_path = None
+        self._cpu_power_last_w = None
         self._gpu_power_path = None
         self._cpu_energy_last_uj = None
         self._cpu_energy_last_ts = None
@@ -51,16 +94,8 @@ class SensorsPanelMixin:
         self._nvml_ready = False
         self._nvml_handle = None
 
-        # Prefer Intel RAPL energy (derived watts) for minimal overhead.
-        rapl_base = "/sys/class/powercap"
-        if os.path.isdir(rapl_base):
-            for entry in sorted(os.listdir(rapl_base)):
-                if not entry.startswith("intel-rapl:"):
-                    continue
-                energy_path = os.path.join(rapl_base, entry, "energy_uj")
-                if os.path.isfile(energy_path):
-                    self._cpu_energy_path = energy_path
-                    break
+        # Prefer package-level RAPL energy (derived watts) for minimal overhead.
+        self._cpu_energy_path, self._cpu_energy_max_uj = self._find_cpu_energy_path()
 
         if self._cpu_energy_path is None:
             self._cpu_power_path = self._find_hwmon_power_path(("coretemp", "k10temp", "cpu"))
@@ -89,23 +124,31 @@ class SensorsPanelMixin:
 
     def _read_cpu_power_watts(self):
         if self._cpu_energy_path:
-            try:
-                with open(self._cpu_energy_path, "r", encoding="utf-8") as handle:
-                    energy_uj = int(handle.read().strip())
-            except Exception:
+            energy_uj = self._read_int_file(self._cpu_energy_path)
+            if energy_uj is None:
                 return None
+
             now = time.monotonic()
             if self._cpu_energy_last_uj is None:
                 self._cpu_energy_last_uj = energy_uj
                 self._cpu_energy_last_ts = now
-                return None
+                return self._cpu_power_last_w
+
             delta_uj = energy_uj - self._cpu_energy_last_uj
             delta_s = now - (self._cpu_energy_last_ts or now)
+
+            # Counter can wrap/reset; compensate when max range is known.
+            if delta_uj < 0 and self._cpu_energy_max_uj and self._cpu_energy_max_uj > 0:
+                delta_uj += self._cpu_energy_max_uj
+
             self._cpu_energy_last_uj = energy_uj
             self._cpu_energy_last_ts = now
+
             if delta_uj <= 0 or delta_s <= 0:
-                return None
-            return (delta_uj / delta_s) / 1_000_000.0
+                return self._cpu_power_last_w
+
+            self._cpu_power_last_w = (delta_uj / delta_s) / 1_000_000.0
+            return self._cpu_power_last_w
 
         if self._cpu_power_path:
             return self._read_hwmon_power_watts(self._cpu_power_path)
@@ -395,8 +438,12 @@ class SensorsPanelMixin:
             pass
 
         current_values = (cpu_val, gpu_val, fan1_val, fan2_val)
+        cpu_watts_text = self._format_watts(self._read_cpu_power_watts())
+        gpu_watts_text = self._format_watts(self._read_gpu_power_watts())
         if current_values == self.last_sensor_values:
-            # No change; skip history and redraw to reduce churn
+            # Always refresh power labels; skip history/redraw if thermal values are unchanged.
+            self.sensor_cpu_watts_label.setText(f"CPU Watts: {cpu_watts_text}")
+            self.sensor_gpu_watts_label.setText(f"GPU Watts: {gpu_watts_text}")
             return
         self.last_sensor_values = current_values
 
@@ -409,8 +456,8 @@ class SensorsPanelMixin:
             self.sensor_gpu_label.setText(f"GPU Temp: {gpu_val} °C")
             self.sensor_fan1_label.setText(f"CPU Fan: {fan1_val} RPM")
             self.sensor_fan2_label.setText(f"GPU Fan: {fan2_val} RPM")
-            self.sensor_cpu_watts_label.setText(f"CPU Watts: {self._format_watts(self._read_cpu_power_watts())}")
-            self.sensor_gpu_watts_label.setText(f"GPU Watts: {self._format_watts(self._read_gpu_power_watts())}")
+            self.sensor_cpu_watts_label.setText(f"CPU Watts: {cpu_watts_text}")
+            self.sensor_gpu_watts_label.setText(f"GPU Watts: {gpu_watts_text}")
             # no last-update display (fixed-rate refresh)
             if not self.is_resizing:
                 self._update_sparklines()

@@ -25,7 +25,7 @@ This fork intentionally targets the **Dell G15 5530** only.
 ## Credits
 
 Original project by cemkaya-mpi:
-https://github.com/cemkaya-mpi/Dell-G-Series-Controller
+<https://github.com/cemkaya-mpi/Dell-G-Series-Controller>
 
 ## Requirements
 
@@ -59,6 +59,12 @@ sudo udevadm control --reload-rules && sudo udevadm trigger
 
 ```bash
 python3 -m pip install --user PySide6 pexpect pyusb pynvml
+```
+
+If you run the app with system Python (not a venv), you can install machine-wide instead:
+
+```bash
+python3 -m pip install PySide6 pexpect pyusb pynvml
 ```
 
 ### 4. Load the `acpi-call` kernel module
@@ -129,6 +135,17 @@ If nothing appears:
 
 - load module: `sudo modprobe acpi-call`
 - ensure `pkexec` is available or set up the sudoers entry described above
+
+### `ModuleNotFoundError: No module named 'usb'`
+
+Install `pyusb` in the same interpreter that runs the app:
+
+```bash
+python3 -m pip install pyusb
+python3 -c "import sys, usb; print(sys.executable); print(usb.__file__)"
+```
+
+If the import still fails, you are likely running a different Python interpreter than the one where `pyusb` was installed.
 
 ## Project Files
 
