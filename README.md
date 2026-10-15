@@ -1,4 +1,4 @@
-# Dell G-Series Controller
+# Dell GAlien Controller
 
 A small, fast Linux app for **Dell G15, G16 and Alienware M16** laptops (Rust + [iced](https://iced.rs)).
 
@@ -63,8 +63,8 @@ If this prints an old version or an error about a "lock file", you are using the
 ### 3. Download and build
 
 ```bash
-git clone https://github.com/PatrickMeerssche/Dell-5530-Controller.git
-cd Dell-5530-Controller
+git clone https://github.com/PatrickMeerssche/Dell-GAlien-Controller.git
+cd Dell-GAlien-Controller
 cargo build --release
 ```
 
@@ -78,9 +78,9 @@ sudo ./install.sh
 
 Run it as your normal user (with `sudo`), not as root. It is the only step that needs a password. It:
 
-- detects your laptop model once and stores it in `/etc/dell5530/model.conf` (you will see the result printed)
-- installs the app (`/usr/local/bin/dell5530-controller`) and its menu entry
-- installs a small background service (`dell5530-helper`) that is the only part running as root. It can only do a fixed list of things (power modes, fans, CPU governor, `nvidia-powerd`), and only your user can talk to it
+- detects your laptop model once and stores it in `/etc/dell-galien/model.conf` (you will see the result printed)
+- installs the app (`/usr/local/bin/dell-galien-controller`) and its menu entry
+- installs a small background service (`dell-galien-helper`) that is the only part running as root. It can only do a fixed list of things (power modes, fans, CPU governor, `nvidia-powerd`), and only your user can talk to it
 - installs the udev rule that lets you control the keyboard lighting without root
 
 If your laptop is not recognized, the installer asks whether to try the generic Dell G-series power controls. These may not suit other models, so only answer `y` if you accept that risk.
@@ -89,12 +89,12 @@ If you ever change the model (for example after moving the SSD to another laptop
 
 ### 5. Start the app
 
-Open **Dell G-Series Controller** from your application menu, or run `dell5530-controller`.
+Open **Dell GAlien Controller** from your application menu, or run `dell-galien-controller`.
 
 ## Update
 
 ```bash
-cd Dell-5530-Controller
+cd Dell-GAlien-Controller
 git pull
 cargo build --release
 sudo ./install.sh
@@ -106,7 +106,7 @@ sudo ./install.sh
 sudo ./uninstall.sh
 ```
 
-Your settings stay in `~/.config/dell5530-controller/`; delete that folder to remove them too.
+Your settings stay in `~/.config/dell-galien-controller/`; delete that folder to remove them too.
 
 ## Troubleshooting
 
@@ -119,11 +119,11 @@ Your laptop was not recognized. Run `./install.sh --list-models`, then install a
 **"Power helper is not running" (power modes and fans don't work)**
 
 ```bash
-systemctl status dell5530-helper
+systemctl status dell-galien-helper
 lsmod | grep acpi_call
 ```
 
-If `acpi_call` is not listed, run `sudo modprobe acpi_call`. If that fails, the module is not installed (step 1) or Secure Boot is blocking it. Then run `sudo systemctl restart dell5530-helper`.
+If `acpi_call` is not listed, run `sudo modprobe acpi_call`. If that fails, the module is not installed (step 1) or Secure Boot is blocking it. Then run `sudo systemctl restart dell-galien-helper`.
 
 **The Nvidia PowerMizer buttons show an error**
 PowerMizer needs an X11 session (not Wayland), the NVIDIA driver and `libxnvctrl0`. The mode only stays set while the app is running, and the app reapplies your last choice when it starts.

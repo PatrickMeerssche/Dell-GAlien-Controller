@@ -11,7 +11,7 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use dell5530_proto::{Fan, Governor};
+use dell_galien_proto::{Fan, Governor};
 use iced::{time, window, Subscription, Task, Theme};
 
 use sensors::{Reader, Sample};
@@ -115,7 +115,7 @@ impl LedFields {
 pub struct App {
     pub settings: Settings,
     /// Laptop model chosen by the installer; never probed at run time.
-    pub model: Option<dell5530_proto::model::Installed>,
+    pub model: Option<dell_galien_proto::model::Installed>,
     pub applied: LedFields,
     pub theme: Theme,
     pub page: Page,
@@ -172,7 +172,7 @@ impl App {
             None => (None, None),
         };
         let app = App {
-            model: dell5530_proto::model::load(),
+            model: dell_galien_proto::model::load(),
             applied: LedFields::of(&settings),
             theme: make_theme(settings.accent),
             fan_sent: [settings.fan_cpu, settings.fan_gpu],
@@ -545,7 +545,7 @@ fn push(q: &mut VecDeque<f32>, v: f32) {
 fn main() -> iced::Result {
     let icon = window::icon::from_file_data(ICON_PNG, None).ok();
     iced::application(App::boot, App::update, view::view)
-        .title("Dell G-Series Controller")
+        .title("Dell GAlien Controller")
         .theme(|app: &App| app.theme.clone())
         .subscription(App::subscription)
         .antialiasing(true)
@@ -555,7 +555,7 @@ fn main() -> iced::Result {
             min_size: Some(iced::Size::new(860.0, 600.0)),
             icon,
             platform_specific: window::settings::PlatformSpecific {
-                application_id: "dell5530-controller".into(),
+                application_id: "dell-galien-controller".into(),
                 ..Default::default()
             },
             ..Default::default()

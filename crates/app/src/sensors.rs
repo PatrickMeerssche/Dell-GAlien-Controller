@@ -7,7 +7,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use dell5530_proto::Request;
+use dell_galien_proto::Request;
 
 use crate::client;
 

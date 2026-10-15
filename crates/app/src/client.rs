@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use dell5530_proto::{model, Fan, Governor, Reply, Request, SOCKET_PATH};
+use dell_galien_proto::{model, Fan, Governor, Reply, Request, SOCKET_PATH};
 
 use crate::settings::PowerMode;
 

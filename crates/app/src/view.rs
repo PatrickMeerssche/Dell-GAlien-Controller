@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use dell5530_proto::Fan;
+use dell_galien_proto::Fan;
 use iced::widget::{button, canvas, column, container, row, scrollable, slider, text, toggler, Space};
 use iced::{
     gradient, mouse, Alignment, Background, Border, Color, Element, Length, Point, Radians, Rectangle,
@@ -10,7 +10,7 @@ use iced::{
 use crate::settings::{Accent, Brightness, LedMode, PowerMode};
 use crate::tuning::PowerMizer;
 use crate::{App, Helper, Message, Page, PerfTab};
-use dell5530_proto::Governor;
+use dell_galien_proto::Governor;
 
 const DIM: Color = Color::from_rgb(0.54, 0.58, 0.65);
 const PRESETS: [[u8; 3]; 9] = [
@@ -154,7 +154,7 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 
     container(
         column![
-            text("DELL G-SERIES").size(22),
+            text("DELL GALIEN").size(22),
             text(app.model.map_or("CONTROLLER".to_string(), |i| i.model.name.to_uppercase())).size(11).color(DIM),
             Space::new().height(24),
             nav("Lighting", Page::Lighting),

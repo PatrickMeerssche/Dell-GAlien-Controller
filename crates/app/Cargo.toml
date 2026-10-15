@@ -1,10 +1,10 @@
 [package]
-name = "dell5530-controller"
+name = "dell-galien-controller"
 version = "2.0.0"
 edition = "2021"
 
 [dependencies]
-dell5530-proto = { path = "../proto" }
+dell-galien-proto = { path = "../proto" }
 iced = { version = "0.14", features = ["tokio", "canvas", "image"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync"] }
 rusb = "0.9"

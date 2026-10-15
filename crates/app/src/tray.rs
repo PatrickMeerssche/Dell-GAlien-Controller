@@ -18,11 +18,11 @@ pub struct Tray {
 
 impl ksni::Tray for Tray {
     fn id(&self) -> String {
-        "dell5530-controller".into()
+        "dell-galien-controller".into()
     }
 
     fn title(&self) -> String {
-        "Dell G-Series Controller".into()
+        "Dell GAlien Controller".into()
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {

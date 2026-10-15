@@ -96,7 +96,7 @@ impl PowerMode {
     }
     /// Value sent to the firmware.
     pub fn code(self) -> u8 {
-        use dell5530_proto::model as m;
+        use dell_galien_proto::model as m;
         match self {
             PowerMode::Balanced => m::BALANCED,
             PowerMode::Performance => m::PERFORMANCE,
@@ -190,7 +190,7 @@ fn path() -> Option<PathBuf> {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("dell5530-controller").join("settings.toml"))
+    Some(base.join("dell-galien-controller").join("settings.toml"))
 }
 
 impl Settings {

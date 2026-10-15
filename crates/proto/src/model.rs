@@ -1,10 +1,10 @@
 //! Supported laptop models. The model is detected once by the installer and stored in
-//! `/etc/dell5530/model.conf`; nothing else probes the hardware at run time.
+//! `/etc/dell-galien/model.conf`; nothing else probes the hardware at run time.
 
 use std::fs;
 
-pub const CONFIG_DIR: &str = "/etc/dell5530";
-pub const CONFIG_PATH: &str = "/etc/dell5530/model.conf";
+pub const CONFIG_DIR: &str = "/etc/dell-galien";
+pub const CONFIG_PATH: &str = "/etc/dell-galien/model.conf";
 
 /// Firmware power-mode codes (the values sent with `set_power_mode`).
 pub const BALANCED: u8 = 0xa0;

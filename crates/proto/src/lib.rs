@@ -6,8 +6,8 @@ use std::fmt;
 
 use model::Wmi;
 
-pub const SOCKET_DIR: &str = "/run/dell5530";
-pub const SOCKET_PATH: &str = "/run/dell5530/helper.sock";
+pub const SOCKET_DIR: &str = "/run/dell-galien";
+pub const SOCKET_PATH: &str = "/run/dell-galien/helper.sock";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Fan {

@@ -1,7 +1,7 @@
 //! Root helper: executes a fixed whitelist of ACPI calls for the unprivileged GUI.
-//! Usage: dell5530-helper --gid <gid>   (socket is chowned root:<gid>, mode 0660)
-//!        dell5530-helper --detect [--model <id>] [--assume-generic]   (install-time)
-//!        dell5530-helper --list-models
+//! Usage: dell-galien-helper --gid <gid>   (socket is chowned root:<gid>, mode 0660)
+//!        dell-galien-helper --detect [--model <id>] [--assume-generic]   (install-time)
+//!        dell-galien-helper --list-models
 
 mod detect;
 
@@ -14,8 +14,8 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
-use dell5530_proto::model::{self, Installed};
-use dell5530_proto::{parse_acpi_result, Reply, Request, SOCKET_DIR, SOCKET_PATH};
+use dell_galien_proto::model::{self, Installed};
+use dell_galien_proto::{parse_acpi_result, Reply, Request, SOCKET_DIR, SOCKET_PATH};
 
 const ACPI_CALL: &str = "/proc/acpi/call";
 
@@ -154,7 +154,7 @@ fn serve(stream: UnixStream) {
 fn parse_gid(args: &[String]) -> Result<u32, String> {
     match (args.first().map(String::as_str), args.get(1)) {
         (Some("--gid"), Some(g)) => g.parse().map_err(|_| "invalid gid".to_string()),
-        _ => Err("usage: dell5530-helper --gid <gid> | --detect [--model <id>] [--assume-generic] | --list-models".into()),
+        _ => Err("usage: dell-galien-helper --gid <gid> | --detect [--model <id>] [--assume-generic] | --list-models".into()),
     }
 }
 
@@ -196,7 +196,7 @@ fn main() {
     chown(SOCKET_PATH, Some(0), Some(gid)).expect("chown socket");
     fs::set_permissions(SOCKET_PATH, fs::Permissions::from_mode(0o660)).expect("chmod socket");
 
-    eprintln!("dell5530-helper listening on {SOCKET_PATH}");
+    eprintln!("dell-galien-helper listening on {SOCKET_PATH}");
     for stream in listener.incoming().flatten() {
         thread::spawn(move || serve(stream));
     }

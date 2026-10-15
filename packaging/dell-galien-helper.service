@@ -1,13 +1,13 @@
 [Unit]
-Description=Dell G15 5530 ACPI helper
+Description=Dell GAlien ACPI helper
 After=local-fs.target
 
 [Service]
 Type=simple
-RuntimeDirectory=dell5530
+RuntimeDirectory=dell-galien
 RuntimeDirectoryMode=0750
 ExecStartPre=-/sbin/modprobe acpi_call
-ExecStart=/usr/local/bin/dell5530-helper --gid @GID@
+ExecStart=/usr/local/bin/dell-galien-helper --gid @GID@
 Restart=on-failure
 ProtectHome=true
 ProtectSystem=strict

@@ -8,7 +8,7 @@ use std::sync::{mpsc, Mutex, OnceLock};
 use std::thread;
 use std::time::Duration;
 
-use dell5530_proto::Governor;
+use dell_galien_proto::Governor;
 use libloading::Library;
 use serde::{Deserialize, Serialize};
 

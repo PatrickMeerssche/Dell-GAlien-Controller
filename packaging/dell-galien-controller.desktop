@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Dell G-Series Controller
+Name=Dell GAlien Controller
 Comment=Keyboard lighting, power modes and fans for Dell G-series laptops
-Exec=/usr/local/bin/dell5530-controller
-Icon=dell5530-controller
+Exec=/usr/local/bin/dell-galien-controller
+Icon=dell-galien-controller
 Terminal=false
 Categories=Utility;System;
-StartupWMClass=dell5530-controller
+StartupWMClass=dell-galien-controller

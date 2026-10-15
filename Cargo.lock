@@ -778,10 +778,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
 
 [[package]]
-name = "dell5530-controller"
+name = "dell-galien-controller"
 version = "2.0.0"
 dependencies = [
- "dell5530-proto",
+ "dell-galien-proto",
  "iced",
  "image",
  "ksni",
@@ -793,14 +793,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "dell5530-helper"
+name = "dell-galien-helper"
 version = "2.0.0"
 dependencies = [
- "dell5530-proto",
+ "dell-galien-proto",
 ]
 
 [[package]]
-name = "dell5530-proto"
+name = "dell-galien-proto"
 version = "2.0.0"
 
 [[package]]

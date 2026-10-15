@@ -1,10 +1,10 @@
-//! One-time model detection, run by `install.sh`. Writes `/etc/dell5530/model.conf`.
+//! One-time model detection, run by `install.sh`. Writes `/etc/dell-galien/model.conf`.
 
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 
-use dell5530_proto::model::{self, Installed, Model, Wmi, CONFIG_DIR, CONFIG_PATH};
-use dell5530_proto::MODEL_PROBE;
+use dell_galien_proto::model::{self, Installed, Model, Wmi, CONFIG_DIR, CONFIG_PATH};
+use dell_galien_proto::MODEL_PROBE;
 
 pub struct Options {
     pub forced: Option<String>,

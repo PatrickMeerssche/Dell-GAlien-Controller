@@ -1,5 +1,5 @@
 [package]
-name = "dell5530-proto"
+name = "dell-galien-proto"
 version = "2.0.0"
 edition = "2021"
 
