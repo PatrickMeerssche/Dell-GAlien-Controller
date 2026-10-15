@@ -1,17 +1,17 @@
 # Dell G15 5530 Controller
 
-A small, fast Linux app for the **Dell G15 5530** (Rust + [iced](https://iced.rs)). It does not support other models.
+A small, fast Linux app for the **Dell G15 5530** (Rust + [iced](https://iced.rs)). It does not support other models for now.
 
 ## What it does
 
-| Page | Features |
-| --- | --- |
-| **Lighting** | Keyboard colour (static or colour-cycling "morph"), brightness, off |
+| Page                              | Features                                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Lighting**                | Keyboard colour (static or colour-cycling "morph"), brightness, off                                                                                           |
 | **Performance → Overview** | Power mode (Balanced, Performance, Quiet, Battery Saver, G Mode, Manual), manual fan boost, live CPU/GPU temperature, usage, power, fan RPM and memory graphs |
-| **Performance → Nvidia** | PowerMizer mode (Auto, Normal, Performance), `nvidia-powerd` on/off |
-| **Performance → CoreCtrl** | CPU governor (Powersave or Performance); also switches the Ubuntu power mode |
-| **Settings** | Accent colour, close-to-tray, diagnostics |
-| **Tray icon** | Click it to turn the keyboard lighting on or off |
+| **Performance → Nvidia**   | PowerMizer mode (Auto, Normal, Performance), `nvidia-powerd` on/off                                                                                         |
+| **Performance → CoreCtrl** | CPU governor (Powersave or Performance); also switches the Ubuntu power mode                                                                                  |
+| **Settings**                | Accent colour, close-to-tray, diagnostics                                                                                                                     |
+| **Tray icon**               | Click it to turn the keyboard lighting on or off                                                                                                              |
 
 ## Install
 
@@ -126,4 +126,4 @@ The previous Python/Qt version is on the `beta-version` branch.
 ## Credits
 
 Based on the original project by cemkaya-mpi:
-<https://github.com/cemkaya-mpi/Dell-G-Series-Controller>
+[https://github.com/cemkaya-mpi/Dell-G-Series-Controller](https://github.com/cemkaya-mpi/Dell-G-Series-Controller)
