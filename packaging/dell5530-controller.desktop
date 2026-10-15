@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dell G15 5530 Controller
+Comment=Keyboard lighting, power modes and fans for the Dell G15 5530
+Exec=/usr/local/bin/dell5530-controller
+Icon=dell5530-controller
+Terminal=false
+Categories=Utility;System;
+StartupWMClass=dell5530-controller

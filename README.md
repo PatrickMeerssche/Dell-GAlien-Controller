@@ -1,26 +1,22 @@
 # Dell G15 5530 Controller
 
-|         Keyboard Led         | Power and Fans               |
-| :--------------------------: | ---------------------------- |
-| ![App](assets/images/app1.png) | ![App](assets/images/app2.png) |
+A **Dell G15 5530**-focused **Linux** controller app, written in Rust with [iced](https://iced.rs):
 
-This is a **Dell G15 5530**-focused **Linux** controller app for:
-
-- **Keyboard lighting** — static colour, morph animation, off, and brightness control
-- **Power profile switching** — toggle between balanced, performance, and quiet modes
-- **Manual fan boost** — force the fans to maximum speed when needed
-- **System tray integration** — toggle LEDs with a single click from the tray icon
-- **Diagnostics panel** — shows detected hardware, privilege state, and last applied settings
+- **Keyboard lighting**: static colour, morph animation, off, and brightness control
+- **Power profiles**: balanced, performance, quiet, battery saver, G Mode and manual
+- **Manual fan boost**: per-fan boost for the CPU and GPU fans
+- **Live sensors**: CPU/GPU temperature, fan RPM and power with sparklines
+- **System tray**: click the tray icon to toggle the keyboard LEDs
+- **Diagnostics**: helper state, detected model, LED firmware and last results
 
 This fork intentionally targets the **Dell G15 5530** only.
-(May add support to other Dell G and Alienware models if needed as the original git)
 
 ## What Is Different From Upstream
 
-- device support narrowed to 5530 RGB controller (`187c:0551`)
-- simplified UI focused on day-to-day use
-- desktop launcher and tray integration
-- brightness handling tuned to persist correctly after mode changes
+- rewritten in Rust (the Python/Qt version lives on the `main` branch)
+- device support narrowed to the 5530 RGB controller (`187c:0551`)
+- the GUI runs as a normal user; only a small systemd helper runs as root, and it can only issue a fixed set of ACPI calls
+- sensors are polled off the UI thread
 
 ## Credits
 
@@ -29,145 +25,72 @@ Original project by cemkaya-mpi:
 
 ## Requirements
 
-- Python 3
-- kernel module: `acpi-call`
-- Python packages:
-  - `PySide6`
-  - `pexpect`
-  - `pyusb`
-  - `pynvml` (optional, NVIDIA GPU power readings)
+Ubuntu/Debian package names; adjust for your distro.
+
+- Rust toolchain (stable): <https://rustup.rs>
+- `build-essential`, `pkg-config` and `libusb-1.0-0-dev` (build time)
+- `acpi-call-dkms` (kernel module, loaded automatically by the installer)
+- `nvidia-smi` (optional, GPU power readings)
+- A StatusNotifier tray host for the tray icon (GNOME: the AppIndicator extension, preinstalled on Ubuntu)
+
+```bash
+sudo apt install build-essential pkg-config libusb-1.0-0-dev acpi-call-dkms
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
 
 ## Installation
-
-### 1. Clone the repository
 
 ```bash
 git clone https://github.com/PatrickMeerssche/Dell-5530-Controller.git
 cd Dell-5530-Controller
+git checkout v2-rust
+cargo build --release
+sudo ./install.sh
 ```
 
-### 2. Install the udev rule
+`install.sh` is the only step that needs sudo. It installs:
 
-The udev rule allows the app to access the RGB USB controller without root privileges:
+- `/usr/local/bin/dell5530-controller` (GUI) and `/usr/local/bin/dell5530-helper` (root helper)
+- `dell5530-helper.service`, which loads `acpi_call` and exposes `/run/dell5530/helper.sock`, usable only by your user's group
+- the udev rule that gives your session access to the RGB USB controller
+- the application menu entry
 
-```bash
-sudo cp 00-aw-elc.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
+Launch **Dell G15 5530 Controller** from the application menu, or run `dell5530-controller`.
+To remove everything: `sudo ./uninstall.sh`.
 
-### 3. Install Python dependencies
-
-```bash
-python3 -m pip install --user PySide6 pexpect pyusb pynvml
-```
-
-If you run the app with system Python (not a venv), you can install machine-wide instead:
-
-```bash
-python3 -m pip install PySide6 pexpect pyusb pynvml
-```
-
-### 4. Load the `acpi-call` kernel module
-
-For the current session:
-
-```bash
-sudo modprobe acpi-call
-```
-
-To load it automatically at every boot, add it to the modules-load configuration:
-
-```bash
-echo "acpi-call" | sudo tee /etc/modules-load.d/acpi-call.conf
-```
-
-## Running the App
-
-From the project folder:
-
-```bash
-python3 main.py
-```
-
-> **Note:** Pre-compiling to bytecode (`python3 -m compileall -f .`) is optional and only marginally speeds up startup. It is not required to run the app.
-
-### Desktop launcher
-
-To make the app appear in your application menu, install the `.desktop` entry:
-
-```bash
-cp Dell-5530-Controller.desktop ~/.local/share/applications/
-```
-
-The helper script `launch-Dell-5530-Controller.sh` handles privilege elevation automatically. Before using it, **edit the `APP_DIR` variable** at the top of the script to match your actual clone location (it defaults to `/home/$USER/Dell-5530-Controller`).
-
-## Optional: Passwordless Launch
-
-The udev rule installed in the [Installation](#installation) step already handles USB access without root. For full passwordless operation (including power profile and fan control via `acpi-call`), create a sudoers entry that allows running the app with `sudo -n`:
-
-```bash
-# Example: allow the current user to run the app without a password prompt
-echo "$USER ALL=(ALL) NOPASSWD: /usr/bin/python3 $(pwd)/main.py" | sudo tee /etc/sudoers.d/Dell-5530-Controller
-sudo visudo -cf /etc/sudoers.d/Dell-5530-Controller
-```
-
-Alternatively, ensure `pkexec` (polkit) is available — the launcher script will fall back to it automatically.
+Settings are stored in `~/.config/dell5530-controller/settings.toml`.
 
 ## Troubleshooting
 
 ### `No supported device was found. Expected RGB controller 187c:0551`
 
-The RGB USB device is not visible to the app at that moment.
-
-Try:
-
 ```bash
 lsusb | grep -i 187c
 ```
 
-If nothing appears:
+If nothing appears, make sure this is a supported 5530 variant, replug power or reboot, and check that the udev rule `00-aw-elc.rules` is installed.
 
-- ensure you are running on a supported 5530 variant
-- replug power / reboot and retry
-- verify USB permissions and udev rule (`00-aw-elc.rules`) — see [Installation](#installation)
-
-### App asks for privileges / power controls missing
-
-- load module: `sudo modprobe acpi-call`
-- ensure `pkexec` is available or set up the sudoers entry described above
-
-### `ModuleNotFoundError: No module named 'usb'`
-
-Install `pyusb` in the same interpreter that runs the app:
+### "Power helper is not running"
 
 ```bash
-python3 -m pip install pyusb
-python3 -c "import sys, usb; print(sys.executable); print(usb.__file__)"
+systemctl status dell5530-helper
+lsmod | grep acpi_call
 ```
 
-If the import still fails, you are likely running a different Python interpreter than the one where `pyusb` was installed.
+If the module is missing, install `acpi-call-dkms` (Secure Boot must allow DKMS modules), then run `sudo systemctl restart dell5530-helper`.
 
-## Project Files
+### No tray icon
+
+GNOME needs the AppIndicator extension (`gnome-shell-extension-appindicator`). Without a tray host, the close button always quits.
+
+## Project Layout
 
 ```
-Dell-5530-Controller/
-├── main.py                             entry point — starts the Qt app and system tray
-├── 00-aw-elc.rules                     udev rule for USB device access
-├── Dell-5530-Controller.desktop    application menu launcher metadata
-├── launch-Dell-5530-Controller.sh  launcher with privilege fallback
-├── core/
-│   ├── main_window.py                  main application window and UI orchestration
-│   ├── services.py                     thin service wrappers (LED, ACPI, fans)
-│   ├── tray.py                         system tray icon and click handling
-│   └── constants.py                    shared UI constants and enums
-├── hw/
-│   ├── awelc.py                        high-level LED control routines
-│   ├── elc.py                          low-level USB/HID communication
-│   ├── elc_constants.py                HID report constants
-│   └── hidreport.py                    HID report builder
-└── ui/
-    ├── led.py                          keyboard lighting panel
-    ├── power.py                        power profile panel
-    ├── sensors.py                      fan / temperature sensor panel
-    └── diagnostics.py                  diagnostics info panel
+Cargo.toml                  workspace
+install.sh / uninstall.sh   one-time sudo install / removal
+00-aw-elc.rules             udev rule for USB access
+packaging/                  systemd unit and desktop entry
+crates/proto/               GUI <-> helper protocol and ACPI call table
+crates/helper/              root helper (ACPI via /proc/acpi/call, RAPL energy)
+crates/app/                 iced GUI: hid.rs, client.rs, sensors.rs, tray.rs, view.rs
 ```

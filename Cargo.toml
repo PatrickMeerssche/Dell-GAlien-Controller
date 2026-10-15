@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/proto", "crates/helper", "crates/app"]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = 3
