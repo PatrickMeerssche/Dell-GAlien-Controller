@@ -150,6 +150,8 @@ pub struct Settings {
     pub close_to_tray: bool,
     pub accent: Accent,
     pub auto_refresh: bool,
+    /// Last PowerMizer mode chosen; reapplied at startup because the driver resets it.
+    pub powermizer: Option<crate::tuning::PowerMizer>,
 }
 
 impl Default for Settings {
@@ -168,6 +170,7 @@ impl Default for Settings {
             close_to_tray: false,
             accent: Accent::Blue,
             auto_refresh: true,
+            powermizer: None,
         }
     }
 }

@@ -330,12 +330,8 @@ fn option_button<'a>(label: &'static str, blurb: &'static str, selected: bool, m
 
 fn nvidia(app: &App) -> Element<'_, Message> {
     let t = &app.tuning;
-    let (current, err) = match &t.powermizer {
-        Some(Ok(m)) => (Some(*m), None),
-        Some(Err(e)) => (None, Some(e.clone())),
-        None => (None, None),
-    };
-    let mut mizer = column![
+    let current = app.settings.powermizer;
+    let mizer = column![
         heading("POWERMIZER MODE"),
         row(PowerMizer::ALL.iter().map(|&m| option_button(
             m.label(),
@@ -344,11 +340,9 @@ fn nvidia(app: &App) -> Element<'_, Message> {
             Message::SetPowerMizer(m)
         )))
         .spacing(10),
+        text("Your choice is remembered and reapplied when the app starts.").size(13).color(DIM),
     ]
     .spacing(10);
-    if let Some(e) = err {
-        mizer = mizer.push(text(format!("Unavailable: {e} (needs nvidia-settings and an X11 session)")).size(13).color(DIM));
-    }
 
     let powerd = match t.powerd {
         Some(on) => row![
@@ -373,6 +367,7 @@ fn corectrl(app: &App) -> Element<'_, Message> {
         None => "unknown".into(),
     };
     let driver = t.scaling_driver.clone().unwrap_or_else(|| "unknown".into());
+    let epp = t.epp.clone().unwrap_or_else(|| "n/a".into());
     let gov = column![
         heading("CPU FREQUENCY GOVERNOR"),
         row![
@@ -380,7 +375,7 @@ fn corectrl(app: &App) -> Element<'_, Message> {
             option_button("Performance", "Favor high clocks", t.governor == Some(Governor::Performance), Message::SetGovernor(Governor::Performance)),
         ]
         .spacing(10),
-        text(format!("Current: {current}   Driver: {driver}")).size(13).color(DIM),
+        text(format!("Current: {current}   EPP: {epp}   Driver: {driver}")).size(13).color(DIM),
     ]
     .spacing(10);
     let mut page = column![panel(gov), status_line(app)].spacing(16);

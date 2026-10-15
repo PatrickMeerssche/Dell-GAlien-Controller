@@ -5,8 +5,9 @@ use std::fs;
 use std::process::Command;
 
 use dell5530_proto::Governor;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PowerMizer {
     Auto,
     Normal,
@@ -40,18 +41,9 @@ impl PowerMizer {
             PowerMizer::Auto => 2,
         }
     }
-
-    fn from_code(c: u8) -> Option<Self> {
-        match c {
-            0 => Some(PowerMizer::Normal),
-            1 => Some(PowerMizer::Performance),
-            2 => Some(PowerMizer::Auto),
-            _ => None,
-        }
-    }
 }
 
-const ATTR: &str = "[gpu:0]/GpuPowerMizerMode";
+const ATTR: &str = "[gpu:0]/GPUPowerMizerMode";
 
 fn nvidia_settings(args: &[&str]) -> Result<String, String> {
     let out = Command::new("nvidia-settings")
@@ -66,14 +58,10 @@ fn nvidia_settings(args: &[&str]) -> Result<String, String> {
     }
 }
 
-pub fn powermizer_get() -> Result<PowerMizer, String> {
-    let v = nvidia_settings(&["-q", ATTR, "-t"])?;
-    v.parse::<u8>().ok().and_then(PowerMizer::from_code).ok_or_else(|| format!("unexpected value: {v}"))
-}
-
-pub fn powermizer_set(mode: PowerMizer) -> Result<PowerMizer, String> {
-    nvidia_settings(&["-a", &format!("{ATTR}={}", mode.code())])?;
-    powermizer_get()
+/// The driver's readback of this attribute stays at 0 on this hardware, so the chosen mode
+/// is remembered by the app instead of being queried.
+pub fn powermizer_set(mode: PowerMizer) -> Result<(), String> {
+    nvidia_settings(&["-a", &format!("{ATTR}={}", mode.code())]).map(|_| ())
 }
 
 pub fn powerd_active() -> Option<bool> {
@@ -97,19 +85,20 @@ pub fn governor_get() -> Option<Governor> {
 
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
-    pub powermizer: Option<Result<PowerMizer, String>>,
     pub powerd: Option<bool>,
     pub governor: Option<Governor>,
+    pub epp: Option<String>,
     pub scaling_driver: Option<String>,
 }
 
 pub fn snapshot() -> Snapshot {
+    let cpu0 = |f: &str| {
+        fs::read_to_string(format!("/sys/devices/system/cpu/cpu0/cpufreq/{f}")).ok().map(|s| s.trim().to_string())
+    };
     Snapshot {
-        powermizer: Some(powermizer_get()),
         powerd: powerd_active(),
         governor: governor_get(),
-        scaling_driver: fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_driver")
-            .ok()
-            .map(|s| s.trim().to_string()),
+        epp: cpu0("energy_performance_preference"),
+        scaling_driver: cpu0("scaling_driver"),
     }
 }

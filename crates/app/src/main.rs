@@ -57,7 +57,7 @@ pub enum Message {
     RefreshTuning,
     Tuning(tuning::Snapshot),
     SetPowerMizer(PowerMizer),
-    PowerMizerDone(Result<PowerMizer, String>),
+    PowerMizerDone(PowerMizer, Result<(), String>),
     SetPowerd(bool),
     PowerdDone(Result<(), String>),
     SetGovernor(Governor),
@@ -195,10 +195,17 @@ impl App {
             tray_rx,
             _tray: tray_handle,
         };
+        let reapply = match app.settings.powermizer {
+            Some(m) => Task::perform(blocking(move || tuning::powermizer_set(m)), move |r| {
+                Message::PowerMizerDone(m, r)
+            }),
+            None => Task::none(),
+        };
         let tasks = Task::batch([
             window::oldest().map(Message::WindowId),
             Task::perform(blocking(client::probe), Message::Probed),
             Task::perform(blocking(hid::version), Message::LedVersion),
+            reapply,
         ]);
         (app, tasks)
     }
@@ -289,12 +296,15 @@ impl App {
             Message::Tuning(s) => self.tuning = s,
             Message::SetPowerMizer(m) => {
                 self.tuning_status = format!("Setting PowerMizer to {}...", m.label());
-                return Task::perform(blocking(move || tuning::powermizer_set(m)), Message::PowerMizerDone);
+                return Task::perform(blocking(move || tuning::powermizer_set(m)), move |r| {
+                    Message::PowerMizerDone(m, r)
+                });
             }
-            Message::PowerMizerDone(r) => match r {
-                Ok(m) => {
-                    self.tuning.powermizer = Some(Ok(m));
+            Message::PowerMizerDone(m, r) => match r {
+                Ok(()) => {
+                    self.settings.powermizer = Some(m);
                     self.tuning_status = format!("PowerMizer set to {}.", m.label());
+                    self.persist();
                 }
                 Err(e) => self.tuning_status = format!("PowerMizer change failed: {e}"),
             },
