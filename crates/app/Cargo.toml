@@ -8,6 +8,7 @@ dell5530-proto = { path = "../proto" }
 iced = { version = "0.14", features = ["tokio", "canvas", "image"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync"] }
 rusb = "0.9"
+libloading = "0.8"
 ksni = { version = "0.3", features = ["blocking"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }

@@ -6,7 +6,7 @@ A **Dell G15 5530**-focused **Linux** controller app, written in Rust with [iced
 - **Power profiles**: balanced, performance, quiet, battery saver, G Mode and manual
 - **Manual fan boost**: per-fan boost for the CPU and GPU fans
 - **Live sensors**: CPU/GPU temperature, usage and power, fan RPM and memory usage with sparklines
-- **Nvidia tab**: PowerMizer mode (Auto, Normal, Performance) and an on/off switch for `nvidia-powerd`
+- **Nvidia tab**: PowerMizer mode (Auto, Normal, Performance), held through an open NV-CONTROL connection and an on/off switch for `nvidia-powerd`
 - **CoreCtrl tab**: CPU frequency governor (Powersave or Performance), set directly through cpufreq
 - **System tray**: click the tray icon to toggle the keyboard LEDs
 - **Diagnostics**: helper state, detected model, LED firmware and last results
@@ -33,7 +33,7 @@ Ubuntu/Debian package names; adjust for your distro.
 - `build-essential`, `pkg-config` and `libusb-1.0-0-dev` (build time)
 - `acpi-call-dkms` (kernel module, loaded automatically by the installer)
 - `nvidia-smi` (optional, GPU usage and power readings)
-- `nvidia-settings` (optional, PowerMizer control; needs an X11 session)
+- `libxnvctrl0` (optional, PowerMizer control; needs an X11 session; installed with `nvidia-settings`)
 - A StatusNotifier tray host for the tray icon (GNOME: the AppIndicator extension, preinstalled on Ubuntu)
 
 ```bash

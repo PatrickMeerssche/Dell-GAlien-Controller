@@ -785,6 +785,7 @@ dependencies = [
  "iced",
  "image",
  "ksni",
+ "libloading",
  "rusb",
  "serde",
  "tokio",

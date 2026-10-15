@@ -1,10 +1,15 @@
 //! NVIDIA PowerMizer, nvidia-powerd and CPU governor state (read as the user; writes of
 //! privileged items go through the helper).
 
+use std::ffi::{c_char, c_int, c_uint, c_void};
 use std::fs;
 use std::process::Command;
+use std::sync::{mpsc, Mutex, OnceLock};
+use std::thread;
+use std::time::Duration;
 
 use dell5530_proto::Governor;
+use libloading::Library;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,25 +48,69 @@ impl PowerMizer {
     }
 }
 
-const ATTR: &str = "[gpu:0]/GPUPowerMizerMode";
+const NV_CTRL_TARGET_TYPE_GPU: c_int = 1;
+const NV_CTRL_GPU_POWER_MIZER_MODE: c_uint = 334;
 
-fn nvidia_settings(args: &[&str]) -> Result<String, String> {
-    let out = Command::new("nvidia-settings")
-        .args(args)
-        .output()
-        .map_err(|e| format!("nvidia-settings not available: {e}"))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr);
-        Err(err.lines().find(|l| !l.trim().is_empty()).unwrap_or("nvidia-settings failed").trim().to_string())
+type Reply = mpsc::Sender<Result<(), String>>;
+
+static NVCTRL: OnceLock<Mutex<mpsc::Sender<(u8, Reply)>>> = OnceLock::new();
+
+extern "C" fn ignore_x_error(_: *mut c_void, _: *mut c_void) -> c_int {
+    0
+}
+
+type OpenDisplay = unsafe extern "C" fn(*const c_char) -> *mut c_void;
+type SetErrorHandler = unsafe extern "C" fn(extern "C" fn(*mut c_void, *mut c_void) -> c_int) -> *mut c_void;
+type XSyncFn = unsafe extern "C" fn(*mut c_void, c_int) -> c_int;
+type SetAttr = unsafe extern "C" fn(*mut c_void, c_int, c_int, c_uint, c_uint, c_int) -> c_int;
+
+/// The driver reverts PowerMizer when the X client that set it disconnects, so one worker
+/// thread keeps its display connection open for the app's lifetime.
+fn nvctrl_worker(rx: mpsc::Receiver<(u8, Reply)>) {
+    let setup = || -> Result<(*mut c_void, XSyncFn, SetAttr, Library, Library), String> {
+        unsafe {
+            let x11 = Library::new("libX11.so.6").map_err(|e| format!("libX11 not found: {e}"))?;
+            let nv = Library::new("libXNVCtrl.so.0")
+                .map_err(|e| format!("libXNVCtrl not found (install libxnvctrl0): {e}"))?;
+            let open: OpenDisplay = *x11.get(b"XOpenDisplay\0").map_err(|e| e.to_string())?;
+            let handler: SetErrorHandler = *x11.get(b"XSetErrorHandler\0").map_err(|e| e.to_string())?;
+            let sync: XSyncFn = *x11.get(b"XSync\0").map_err(|e| e.to_string())?;
+            let set: SetAttr = *nv.get(b"XNVCTRLSetTargetAttributeAndGetStatus\0").map_err(|e| e.to_string())?;
+            handler(ignore_x_error);
+            let dpy = open(std::ptr::null());
+            if dpy.is_null() {
+                return Err("cannot open the X display (PowerMizer needs an X11 session)".into());
+            }
+            Ok((dpy, sync, set, x11, nv))
+        }
+    };
+    let state = setup();
+    for (value, reply) in rx {
+        let result = match &state {
+            Err(e) => Err(e.clone()),
+            Ok((dpy, sync, set, _, _)) => unsafe {
+                let ok = set(*dpy, NV_CTRL_TARGET_TYPE_GPU, 0, 0, NV_CTRL_GPU_POWER_MIZER_MODE, c_int::from(value));
+                sync(*dpy, 0);
+                if ok != 0 { Ok(()) } else { Err("the driver rejected the PowerMizer change".into()) }
+            },
+        };
+        let _ = reply.send(result);
     }
 }
 
-/// The driver's readback of this attribute stays at 0 on this hardware, so the chosen mode
-/// is remembered by the app instead of being queried.
 pub fn powermizer_set(mode: PowerMizer) -> Result<(), String> {
-    nvidia_settings(&["-a", &format!("{ATTR}={}", mode.code())]).map(|_| ())
+    let tx = NVCTRL
+        .get_or_init(|| {
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(move || nvctrl_worker(rx));
+            Mutex::new(tx)
+        })
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let (reply_tx, reply_rx) = mpsc::channel();
+    tx.send((mode.code(), reply_tx)).map_err(|_| "NV-CONTROL worker stopped".to_string())?;
+    reply_rx.recv_timeout(Duration::from_secs(5)).map_err(|_| "NV-CONTROL did not answer".to_string())?
 }
 
 pub fn powerd_active() -> Option<bool> {
