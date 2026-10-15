@@ -15,7 +15,7 @@ This fork intentionally targets the **Dell G15 5530** only.
 
 ## What Is Different From Upstream
 
-- rewritten in Rust (the Python/Qt version lives on the `main` branch)
+- rewritten in Rust (the Python/Qt version lives on the `beta-version` branch)
 - device support narrowed to the 5530 RGB controller (`187c:0551`)
 - the GUI runs as a normal user; only a small systemd helper runs as root, and it can only issue a fixed set of ACPI calls
 - sensors are polled off the UI thread
@@ -46,7 +46,6 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```bash
 git clone https://github.com/PatrickMeerssche/Dell-5530-Controller.git
 cd Dell-5530-Controller
-git checkout v2-rust
 cargo build --release
 sudo ./install.sh
 ```
