@@ -22,7 +22,7 @@ impl ksni::Tray for Tray {
     }
 
     fn title(&self) -> String {
-        "Dell G15 5530 Controller".into()
+        "Dell G-Series Controller".into()
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {

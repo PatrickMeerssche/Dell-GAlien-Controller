@@ -1,5 +1,9 @@
 //! Root helper: executes a fixed whitelist of ACPI calls for the unprivileged GUI.
 //! Usage: dell5530-helper --gid <gid>   (socket is chowned root:<gid>, mode 0660)
+//!        dell5530-helper --detect [--model <id>] [--assume-generic]   (install-time)
+//!        dell5530-helper --list-models
+
+mod detect;
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
@@ -10,13 +14,16 @@ use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
+use dell5530_proto::model::{self, Installed};
 use dell5530_proto::{parse_acpi_result, Reply, Request, SOCKET_DIR, SOCKET_PATH};
 
 const ACPI_CALL: &str = "/proc/acpi/call";
 
 static ACPI_LOCK: Mutex<()> = Mutex::new(());
+/// Model chosen by the installer; read once at start-up.
+static MODEL: OnceLock<Option<Installed>> = OnceLock::new();
 
-fn acpi(call: &str) -> Result<u32, String> {
+pub(crate) fn acpi(call: &str) -> Result<u32, String> {
     let _guard = ACPI_LOCK.lock().unwrap_or_else(|e| e.into_inner());
     let mut f = File::options()
         .write(true)
@@ -96,13 +103,25 @@ fn set_nvidia_powerd(on: bool) -> Reply {
 
 fn handle_request(req: Request) -> Reply {
     match req {
+        Request::Ping => return Reply::Ok(Vec::new()),
         Request::SetGovernor(g) => return set_governor(g.name()),
         Request::SetNvidiaPowerd(on) => return set_nvidia_powerd(on),
         _ => {}
     }
+    let Some(installed) = MODEL.get().copied().flatten() else {
+        return Reply::Err("no laptop model configured; run sudo ./install.sh".into());
+    };
+    if !installed.model.power {
+        return Reply::Err(format!("{} has no supported power controls", installed.model.name));
+    }
+    if let Request::SetPowerMode(m) = req {
+        if !installed.model.modes.contains(&m) {
+            return Reply::Err(format!("power mode {m:#04x} is not supported by {}", installed.model.name));
+        }
+    }
     let mut out = Vec::new();
     for call in req.acpi_calls() {
-        match acpi(&call.to_acpi_string()) {
+        match acpi(&call.to_acpi_string(installed.wmi)) {
             Ok(v) => out.push(u64::from(v)),
             Err(e) => return Reply::Err(e),
         }
@@ -132,22 +151,42 @@ fn serve(stream: UnixStream) {
     }
 }
 
-fn parse_gid() -> Result<u32, String> {
-    let mut args = std::env::args().skip(1);
-    match (args.next().as_deref(), args.next()) {
+fn parse_gid(args: &[String]) -> Result<u32, String> {
+    match (args.first().map(String::as_str), args.get(1)) {
         (Some("--gid"), Some(g)) => g.parse().map_err(|_| "invalid gid".to_string()),
-        _ => Err("usage: dell5530-helper --gid <gid>".into()),
+        _ => Err("usage: dell5530-helper --gid <gid> | --detect [--model <id>] [--assume-generic] | --list-models".into()),
     }
 }
 
 fn main() {
-    let gid = match parse_gid() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("--list-models") => {
+            detect::list_models();
+            return;
+        }
+        Some("--detect") => {
+            let forced = args.iter().position(|a| a == "--model").and_then(|i| args.get(i + 1)).cloned();
+            let assume_generic = args.iter().any(|a| a == "--assume-generic");
+            std::process::exit(detect::run(detect::Options { forced, assume_generic }));
+        }
+        _ => {}
+    }
+
+    let gid = match parse_gid(&args) {
         Ok(g) => g,
         Err(e) => {
             eprintln!("{e}");
             std::process::exit(2);
         }
     };
+
+    let installed = model::load();
+    match installed {
+        Some(i) => eprintln!("model: {} via {}", i.model.name, i.wmi.namespace()),
+        None => eprintln!("no model configured; run sudo ./install.sh"),
+    }
+    let _ = MODEL.set(installed);
 
     fs::create_dir_all(SOCKET_DIR).expect("create socket dir");
     let _ = fs::remove_file(SOCKET_PATH);

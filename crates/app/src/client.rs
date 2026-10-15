@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use dell5530_proto::{Fan, Governor, Reply, Request, SOCKET_PATH};
+use dell5530_proto::{model, Fan, Governor, Reply, Request, SOCKET_PATH};
 
 use crate::settings::PowerMode;
 
@@ -33,13 +33,9 @@ pub struct Probe {
 }
 
 pub fn probe() -> Result<Probe, String> {
-    let sig = first(Request::Model)?;
-    // Signature 0 identifies the Dell G15 5530.
-    if sig == 0 {
-        Ok(Probe { supported: true, model: "Dell G15 5530".into() })
-    } else {
-        Ok(Probe { supported: false, model: format!("Unsupported signature {sig:#x}") })
-    }
+    let installed = model::load().ok_or("no laptop model configured; run sudo ./install.sh")?;
+    call(Request::Ping)?;
+    Ok(Probe { supported: installed.model.power, model: installed.model.name.to_string() })
 }
 
 pub fn set_power_mode(mode: PowerMode) -> Result<String, String> {

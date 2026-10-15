@@ -154,8 +154,8 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 
     container(
         column![
-            text("DELL G15").size(24),
-            text("5530 CONTROLLER").size(11).color(DIM),
+            text("DELL G-SERIES").size(22),
+            text(app.model.map_or("CONTROLLER".to_string(), |i| i.model.name.to_uppercase())).size(11).color(DIM),
             Space::new().height(24),
             nav("Lighting", Page::Lighting),
             nav("Performance", Page::Performance),
@@ -173,6 +173,14 @@ fn sidebar(app: &App) -> Element<'_, Message> {
 }
 
 fn lighting(app: &App) -> Element<'_, Message> {
+    if app.model.is_some_and(|i| !i.model.keyboard) {
+        return column![
+            text("Keyboard Lighting").size(26),
+            panel(text("Keyboard lighting is not supported on this model.").color(DIM)),
+        ]
+        .spacing(16)
+        .into();
+    }
     let s = &app.settings;
     let mut controls = column![
         heading("MODE"),
@@ -405,12 +413,14 @@ fn overview(app: &App) -> Element<'_, Message> {
                 }))
                 .spacing(10)
             };
-            let mut power = column![
-                heading("POWER MODE"),
-                chips(&PowerMode::ALL[..3]),
-                chips(&PowerMode::ALL[3..]),
-            ]
-            .spacing(10);
+            let modes: Vec<PowerMode> = PowerMode::ALL
+                .into_iter()
+                .filter(|m| app.model.is_some_and(|i| i.model.modes.contains(&m.code())))
+                .collect();
+            let mut power = column![heading("POWER MODE")].spacing(10);
+            for group in modes.chunks(3) {
+                power = power.push(chips(group));
+            }
 
             if s.power == PowerMode::Manual {
                 let fan = |name: &'static str, fan: Fan, v: u8| {
@@ -436,7 +446,7 @@ fn overview(app: &App) -> Element<'_, Message> {
         Helper::Checking => page = page.push(panel(text("Checking the power helper...").color(DIM))),
         Helper::Unsupported(m) => {
             page = page.push(panel(
-                text(format!("Power and fan controls are only available on the Dell G15 5530 ({m}).")).color(DIM),
+                text(format!("Power and fan controls are not available for this laptop ({m}).")).color(DIM),
             ))
         }
         Helper::Unavailable(e) => {

@@ -51,17 +51,21 @@ impl Brightness {
 pub enum PowerMode {
     Balanced,
     Performance,
+    Cool,
     Quiet,
+    FullSpeed,
     BatterySaver,
     GMode,
     Manual,
 }
 
 impl PowerMode {
-    pub const ALL: [PowerMode; 6] = [
+    pub const ALL: [PowerMode; 8] = [
         PowerMode::Balanced,
         PowerMode::Performance,
+        PowerMode::Cool,
         PowerMode::Quiet,
+        PowerMode::FullSpeed,
         PowerMode::BatterySaver,
         PowerMode::GMode,
         PowerMode::Manual,
@@ -70,7 +74,9 @@ impl PowerMode {
         match self {
             PowerMode::Balanced => "Balanced",
             PowerMode::Performance => "Performance",
+            PowerMode::Cool => "Cool",
             PowerMode::Quiet => "Quiet",
+            PowerMode::FullSpeed => "Full Speed",
             PowerMode::BatterySaver => "Battery Saver",
             PowerMode::GMode => "G Mode",
             PowerMode::Manual => "Manual",
@@ -80,7 +86,9 @@ impl PowerMode {
         match self {
             PowerMode::Balanced => "Default thermal profile",
             PowerMode::Performance => "Higher sustained clocks",
+            PowerMode::Cool => "Lower temperatures",
             PowerMode::Quiet => "Lower fan noise",
+            PowerMode::FullSpeed => "Fans at full speed",
             PowerMode::BatterySaver => "Reduced power draw",
             PowerMode::GMode => "Maximum cooling and power",
             PowerMode::Manual => "You control fan boost",
@@ -88,13 +96,16 @@ impl PowerMode {
     }
     /// Value sent to the firmware.
     pub fn code(self) -> u8 {
+        use dell5530_proto::model as m;
         match self {
-            PowerMode::Balanced => 0xa0,
-            PowerMode::Performance => 0xa1,
-            PowerMode::Quiet => 0xa3,
-            PowerMode::BatterySaver => 0xa5,
-            PowerMode::GMode => 0xab,
-            PowerMode::Manual => 0x00,
+            PowerMode::Balanced => m::BALANCED,
+            PowerMode::Performance => m::PERFORMANCE,
+            PowerMode::Cool => m::COOL,
+            PowerMode::Quiet => m::QUIET,
+            PowerMode::FullSpeed => m::FULL_SPEED,
+            PowerMode::BatterySaver => m::BATTERY_SAVER,
+            PowerMode::GMode => m::G_MODE,
+            PowerMode::Manual => m::MANUAL,
         }
     }
 }

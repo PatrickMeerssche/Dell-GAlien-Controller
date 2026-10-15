@@ -15,6 +15,7 @@ rm -f /etc/systemd/system/dell5530-helper.service \
       /usr/share/icons/hicolor/256x256/apps/dell5530-controller.png \
       /etc/udev/rules.d/00-aw-elc.rules \
       /etc/modules-load.d/acpi-call.conf
+rm -rf /etc/dell5530
 systemctl daemon-reload
 udevadm control --reload-rules
 echo "Removed."

@@ -114,6 +114,8 @@ impl LedFields {
 
 pub struct App {
     pub settings: Settings,
+    /// Laptop model chosen by the installer; never probed at run time.
+    pub model: Option<dell5530_proto::model::Installed>,
     pub applied: LedFields,
     pub theme: Theme,
     pub page: Page,
@@ -170,6 +172,7 @@ impl App {
             None => (None, None),
         };
         let app = App {
+            model: dell5530_proto::model::load(),
             applied: LedFields::of(&settings),
             theme: make_theme(settings.accent),
             fan_sent: [settings.fan_cpu, settings.fan_gpu],
@@ -542,7 +545,7 @@ fn push(q: &mut VecDeque<f32>, v: f32) {
 fn main() -> iced::Result {
     let icon = window::icon::from_file_data(ICON_PNG, None).ok();
     iced::application(App::boot, App::update, view::view)
-        .title("Dell G15 5530 Controller")
+        .title("Dell G-Series Controller")
         .theme(|app: &App| app.theme.clone())
         .subscription(App::subscription)
         .antialiasing(true)

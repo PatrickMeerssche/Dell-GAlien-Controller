@@ -1,6 +1,10 @@
 //! Wire protocol between the GUI and the root helper. One text line per request/reply.
 
+pub mod model;
+
 use std::fmt;
+
+use model::Wmi;
 
 pub const SOCKET_DIR: &str = "/run/dell5530";
 pub const SOCKET_PATH: &str = "/run/dell5530/helper.sock";
@@ -63,7 +67,8 @@ impl Governor {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Request {
-    Model,
+    /// Replies `ok` when the helper is running.
+    Ping,
     GetPowerMode,
     SetPowerMode(u8),
     GetGMode,
@@ -79,22 +84,29 @@ pub enum Request {
     SetNvidiaPowerd(bool),
 }
 
-/// One WMAX call: `\_SB.AMWW.WMAX 0 <cmd> {a, b, c, 0x00}`.
+/// One WMAX call: `\_SB.<AMWW|AMW3>.WMAX 0 <cmd> {a, b, c, 0x00}`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AcpiCall {
     pub cmd: u8,
     pub args: [u8; 3],
 }
 
+/// Asks the firmware for the laptop model signature (used once, by the installer).
+pub const MODEL_PROBE: AcpiCall = AcpiCall::new(0x1a, 0x02, 0x02, 0x00);
+
 impl AcpiCall {
     const fn new(cmd: u8, a: u8, b: u8, c: u8) -> Self {
         Self { cmd, args: [a, b, c] }
     }
 
-    pub fn to_acpi_string(self) -> String {
+    pub fn to_acpi_string(self, wmi: Wmi) -> String {
         format!(
-            "\\_SB.AMWW.WMAX 0 0x{:02x} {{0x{:02x}, 0x{:02x}, 0x{:02x}, 0x00}}",
-            self.cmd, self.args[0], self.args[1], self.args[2]
+            "\\_SB.{}.WMAX 0 0x{:02x} {{0x{:02x}, 0x{:02x}, 0x{:02x}, 0x00}}",
+            wmi.namespace(),
+            self.cmd,
+            self.args[0],
+            self.args[1],
+            self.args[2]
         )
     }
 }
@@ -103,7 +115,7 @@ impl Request {
     /// ACPI calls needed to answer this request, in order.
     pub fn acpi_calls(self) -> Vec<AcpiCall> {
         match self {
-            Request::Model => vec![AcpiCall::new(0x1a, 0x02, 0x02, 0x00)],
+            Request::Ping | Request::SetGovernor(_) | Request::SetNvidiaPowerd(_) => Vec::new(),
             Request::GetPowerMode => vec![AcpiCall::new(0x14, 0x0b, 0x00, 0x00)],
             Request::SetPowerMode(m) => vec![AcpiCall::new(0x15, 0x01, m, 0x00)],
             Request::GetGMode => vec![AcpiCall::new(0x25, 0x02, 0x00, 0x00)],
@@ -116,13 +128,12 @@ impl Request {
                 AcpiCall::new(0x14, 0x05, Fan::Cpu.id(), 0x00),
                 AcpiCall::new(0x14, 0x05, Fan::Gpu.id(), 0x00),
             ],
-            Request::SetGovernor(_) | Request::SetNvidiaPowerd(_) => Vec::new(),
         }
     }
 
     pub fn encode(self) -> String {
         match self {
-            Request::Model => "model".into(),
+            Request::Ping => "ping".into(),
             Request::GetPowerMode => "get_power_mode".into(),
             Request::SetPowerMode(m) => format!("set_power_mode {m}"),
             Request::GetGMode => "get_g_mode".into(),
@@ -138,7 +149,7 @@ impl Request {
     pub fn decode(line: &str) -> Option<Self> {
         let mut it = line.split_whitespace();
         let req = match it.next()? {
-            "model" => Request::Model,
+            "ping" => Request::Ping,
             "get_power_mode" => Request::GetPowerMode,
             "set_power_mode" => Request::SetPowerMode(it.next()?.parse().ok()?),
             "get_g_mode" => Request::GetGMode,
@@ -214,7 +225,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         for r in [
-            Request::Model,
+            Request::Ping,
             Request::SetPowerMode(0xa1),
             Request::SetFanBoost(Fan::Gpu, 200),
             Request::GetFanBoost(Fan::Cpu),
@@ -230,9 +241,8 @@ mod tests {
     #[test]
     fn acpi_string_matches_python_template() {
         let c = Request::SetFanBoost(Fan::Cpu, 0xff).acpi_calls()[0];
-        assert_eq!(c.to_acpi_string(), "\\_SB.AMWW.WMAX 0 0x15 {0x02, 0x32, 0xff, 0x00}");
-        let c = Request::Model.acpi_calls()[0];
-        assert_eq!(c.to_acpi_string(), "\\_SB.AMWW.WMAX 0 0x1a {0x02, 0x02, 0x00, 0x00}");
+        assert_eq!(c.to_acpi_string(Wmi::Amww), "\\_SB.AMWW.WMAX 0 0x15 {0x02, 0x32, 0xff, 0x00}");
+        assert_eq!(MODEL_PROBE.to_acpi_string(Wmi::Amw3), "\\_SB.AMW3.WMAX 0 0x1a {0x02, 0x02, 0x00, 0x00}");
     }
 
     #[test]

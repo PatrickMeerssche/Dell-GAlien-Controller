@@ -7,7 +7,7 @@ use rusb::{Context, DeviceHandle, UsbContext};
 use crate::settings::{Brightness, LedMode};
 
 const VID: u16 = 0x187c;
-const PID: u16 = 0x0551;
+const PIDS: [u16; 2] = [0x0551, 0x0550];
 const TIMEOUT: Duration = Duration::from_secs(1);
 const REPORT_LEN: usize = 33;
 
@@ -39,7 +39,7 @@ const DURATION_BATTERY_LOW: u16 = 0xff;
 const TEMPO_MIN: u16 = 0x01;
 const ZONES: [u8; 4] = [0, 1, 2, 3];
 
-pub const NOT_FOUND: &str = "No supported device was found. Expected RGB controller 187c:0551";
+pub const NOT_FOUND: &str = "No supported device was found. Expected RGB controller 187c:0550 or 187c:0551";
 
 #[derive(Clone, Copy)]
 struct Action {
@@ -70,8 +70,9 @@ fn usb_err(e: rusb::Error) -> String {
 impl Elc {
     fn open() -> R<Self> {
         let ctx = Context::new().map_err(usb_err)?;
-        let handle = ctx
-            .open_device_with_vid_pid(VID, PID)
+        let handle = PIDS
+            .iter()
+            .find_map(|&pid| ctx.open_device_with_vid_pid(VID, pid))
             .ok_or_else(|| NOT_FOUND.to_string())?;
         let _ = handle.reset();
         if handle.kernel_driver_active(0).unwrap_or(false) {

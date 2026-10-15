@@ -1,13 +1,30 @@
-# Dell G15 5530 Controller
+# Dell G-Series Controller
 
-A small, fast Linux app for the **Dell G15 5530** (Rust + [iced](https://iced.rs)). It does not support other models for now.
+A small, fast Linux app for **Dell G15, G16 and Alienware M16** laptops (Rust + [iced](https://iced.rs)).
+
+## Supported models
+
+| Laptop           | Power modes and fans | Keyboard lighting |
+| ---------------- | -------------------- | ----------------- |
+| G15 5530         | yes (tested)         | yes (tested)      |
+| G15 5525         | yes                  | yes               |
+| G15 5520         | yes                  | yes               |
+| G15 5515         | G Mode and Manual only | yes             |
+| G15 5511         | yes                  | yes               |
+| G16 7620         | yes                  | untested          |
+| G16 7630         | yes                  | untested          |
+| Alienware M16 R1 | yes                  | untested          |
+
+The model support comes from the original project (see Credits); only the G15 5530 is tested by this fork's author.
+The installer detects your laptop **once**, during `sudo ./install.sh`, and remembers it. The app never probes the hardware to find the model again.
+Other laptops with a `187c:0550` or `187c:0551` keyboard controller get keyboard lighting only, unless you choose to try the generic power controls during install.
 
 ## What it does
 
 | Page                              | Features                                                                                                                                                      |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Lighting**                | Keyboard colour (static or colour-cycling "morph"), brightness, off                                                                                           |
-| **Performance → Overview** | Power mode (Balanced, Performance, Quiet, Battery Saver, G Mode, Manual), manual fan boost, live CPU/GPU temperature, usage, power, fan RPM and memory graphs |
+| **Performance → Overview** | Power mode (the modes your model supports: Balanced, Performance, Cool, Quiet, Full Speed, Battery Saver, G Mode, Manual), manual fan boost, live CPU/GPU temperature, usage, power, fan RPM and memory graphs |
 | **Performance → Nvidia**   | PowerMizer mode (Auto, Normal, Performance), `nvidia-powerd` on/off                                                                                         |
 | **Performance → CoreCtrl** | CPU governor (Powersave or Performance); also switches the Ubuntu power mode                                                                                  |
 | **Settings**                | Accent colour, close-to-tray, diagnostics                                                                                                                     |
@@ -59,15 +76,20 @@ The first build takes a few minutes.
 sudo ./install.sh
 ```
 
-Run it as your normal user (with `sudo`), not as root. It is the only step that needs a password. It installs:
+Run it as your normal user (with `sudo`), not as root. It is the only step that needs a password. It:
 
-- the app (`/usr/local/bin/dell5530-controller`) and its menu entry
-- a small background service (`dell5530-helper`) that is the only part running as root. It can only do a fixed list of things (power modes, fans, CPU governor, `nvidia-powerd`), and only your user can talk to it
-- the udev rule that lets you control the keyboard lighting without root
+- detects your laptop model once and stores it in `/etc/dell5530/model.conf` (you will see the result printed)
+- installs the app (`/usr/local/bin/dell5530-controller`) and its menu entry
+- installs a small background service (`dell5530-helper`) that is the only part running as root. It can only do a fixed list of things (power modes, fans, CPU governor, `nvidia-powerd`), and only your user can talk to it
+- installs the udev rule that lets you control the keyboard lighting without root
+
+If your laptop is not recognized, the installer asks whether to try the generic Dell G-series power controls. These may not suit other models, so only answer `y` if you accept that risk.
+You can also pick a model yourself with `sudo ./install.sh --model g15_5525` (list the ids with `./install.sh --list-models`).
+If you ever change the model (for example after moving the SSD to another laptop), just run `sudo ./install.sh` again.
 
 ### 5. Start the app
 
-Open **Dell G15 5530 Controller** from your application menu, or run `dell5530-controller`.
+Open **Dell G-Series Controller** from your application menu, or run `dell5530-controller`.
 
 ## Update
 
@@ -89,7 +111,10 @@ Your settings stay in `~/.config/dell5530-controller/`; delete that folder to re
 ## Troubleshooting
 
 **"No supported device was found" (keyboard lighting)**
-Run `lsusb | grep -i 187c`. If nothing is listed, this is not a supported 5530, or the keyboard controller needs a reboot. Check that `/etc/udev/rules.d/00-aw-elc.rules` exists, then unplug the charger and reboot.
+Run `lsusb | grep -i 187c`. If nothing is listed, this laptop has no supported keyboard controller (`187c:0550` or `187c:0551`), or it needs a reboot. Check that `/etc/udev/rules.d/00-aw-elc.rules` exists, then unplug the charger and reboot.
+
+**The installer says "keyboard lighting only" or the power modes are missing**
+Your laptop was not recognized. Run `./install.sh --list-models`, then install again with `sudo ./install.sh --model <id>`, or `sudo ./install.sh --assume-generic` to try the generic controls. Please also open an issue with the output of `cat /sys/class/dmi/id/product_name`.
 
 **"Power helper is not running" (power modes and fans don't work)**
 
@@ -116,8 +141,8 @@ Cargo.toml                  workspace
 install.sh / uninstall.sh   one-time sudo install / removal
 00-aw-elc.rules             udev rule for keyboard USB access
 packaging/                  systemd unit and desktop entry
-crates/proto/               GUI <-> helper protocol and ACPI call table
-crates/helper/              root helper (ACPI via /proc/acpi/call, RAPL energy, governor, nvidia-powerd)
+crates/proto/               GUI <-> helper protocol, ACPI call table and the supported-model table (model.rs)
+crates/helper/              root helper (ACPI via /proc/acpi/call, RAPL energy, governor, nvidia-powerd) and the install-time model detection (--detect)
 crates/app/                 iced GUI: hid.rs, client.rs, sensors.rs, tuning.rs, tray.rs, view.rs
 ```
 
