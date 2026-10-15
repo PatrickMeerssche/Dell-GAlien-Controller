@@ -3,6 +3,7 @@ mod hid;
 mod sensors;
 mod settings;
 mod tray;
+mod tuning;
 mod view;
 
 use std::collections::VecDeque;
@@ -10,12 +11,13 @@ use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use dell5530_proto::Fan;
+use dell5530_proto::{Fan, Governor};
 use iced::{time, window, Subscription, Task, Theme};
 
 use sensors::{Reader, Sample};
 use settings::{Accent, Brightness, LedMode, PowerMode, Settings};
 use tray::TrayEvent;
+use tuning::PowerMizer;
 
 pub const ICON_PNG: &[u8] = include_bytes!("../../../assets/images/alien-square.png");
 const HISTORY: usize = 120;
@@ -25,6 +27,13 @@ pub enum Page {
     Lighting,
     Performance,
     Settings,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PerfTab {
+    Overview,
+    Nvidia,
+    CoreCtrl,
 }
 
 #[derive(Clone, Debug)]
@@ -44,6 +53,15 @@ impl Helper {
 #[derive(Clone, Debug)]
 pub enum Message {
     Page(Page),
+    PerfTab(PerfTab),
+    RefreshTuning,
+    Tuning(tuning::Snapshot),
+    SetPowerMizer(PowerMizer),
+    PowerMizerDone(Result<PowerMizer, String>),
+    SetPowerd(bool),
+    PowerdDone(Result<(), String>),
+    SetGovernor(Governor),
+    GovernorDone(Result<(), String>),
     LedMode(LedMode),
     Rgb(usize, u8),
     Preset([u8; 3]),
@@ -99,13 +117,16 @@ pub struct App {
     pub applied: LedFields,
     pub theme: Theme,
     pub page: Page,
+    pub perf_tab: PerfTab,
+    pub tuning: tuning::Snapshot,
+    pub tuning_status: String,
     pub helper: Helper,
     pub led_firmware: String,
     pub led_status: String,
     pub power_status: String,
     pub last_acpi: String,
     pub sample: Option<Sample>,
-    pub history: [VecDeque<f32>; 4],
+    pub history: [VecDeque<f32>; 7],
     pub tray_ok: bool,
     pub visible: bool,
     window: Option<window::Id>,
@@ -154,6 +175,9 @@ impl App {
             fan_sent: [settings.fan_cpu, settings.fan_gpu],
             settings,
             page: Page::Lighting,
+            perf_tab: PerfTab::Overview,
+            tuning: tuning::Snapshot::default(),
+            tuning_status: String::new(),
             helper: Helper::Checking,
             led_firmware: "Unknown".into(),
             led_status: "Idle".into(),
@@ -207,6 +231,17 @@ impl App {
         Task::perform(blocking(move || client::set_fan_boost(fan, value)), move |r| Message::FanDone(fan, r))
     }
 
+    /// Drops the sampler so nvidia-smi exits and the dGPU can idle.
+    fn stop_sampling(&self) {
+        if let Ok(mut r) = self.reader.try_lock() {
+            *r = None;
+        }
+    }
+
+    fn refresh_tuning() -> Task<Message> {
+        Task::perform(blocking(tuning::snapshot), Message::Tuning)
+    }
+
     fn show_window(&mut self) -> Task<Message> {
         self.visible = true;
         match self.window {
@@ -233,7 +268,58 @@ impl App {
 
     fn update(&mut self, message: Message) -> Task<Message> {
         match message {
-            Message::Page(p) => self.page = p,
+            Message::Page(p) => {
+                self.page = p;
+                if p != Page::Performance || self.perf_tab != PerfTab::Overview {
+                    self.stop_sampling();
+                }
+                if p == Page::Performance && self.perf_tab != PerfTab::Overview {
+                    return Self::refresh_tuning();
+                }
+            }
+            Message::PerfTab(t) => {
+                self.perf_tab = t;
+                if t == PerfTab::Overview {
+                    return Task::none();
+                }
+                self.stop_sampling();
+                return Self::refresh_tuning();
+            }
+            Message::RefreshTuning => return Self::refresh_tuning(),
+            Message::Tuning(s) => self.tuning = s,
+            Message::SetPowerMizer(m) => {
+                self.tuning_status = format!("Setting PowerMizer to {}...", m.label());
+                return Task::perform(blocking(move || tuning::powermizer_set(m)), Message::PowerMizerDone);
+            }
+            Message::PowerMizerDone(r) => match r {
+                Ok(m) => {
+                    self.tuning.powermizer = Some(Ok(m));
+                    self.tuning_status = format!("PowerMizer set to {}.", m.label());
+                }
+                Err(e) => self.tuning_status = format!("PowerMizer change failed: {e}"),
+            },
+            Message::SetPowerd(on) => {
+                self.tuning_status = format!("{} nvidia-powerd...", if on { "Starting" } else { "Stopping" });
+                return Task::perform(blocking(move || client::set_nvidia_powerd(on)), Message::PowerdDone);
+            }
+            Message::PowerdDone(r) => {
+                self.tuning_status = match r {
+                    Ok(()) => "nvidia-powerd updated.".into(),
+                    Err(e) => format!("nvidia-powerd change failed: {e}"),
+                };
+                return Self::refresh_tuning();
+            }
+            Message::SetGovernor(g) => {
+                self.tuning_status = format!("Setting governor to {}...", g.name());
+                return Task::perform(blocking(move || client::set_governor(g)), Message::GovernorDone);
+            }
+            Message::GovernorDone(r) => {
+                self.tuning_status = match r {
+                    Ok(()) => "Governor updated.".into(),
+                    Err(e) => format!("Governor change failed: {e}"),
+                };
+                return Self::refresh_tuning();
+            }
             Message::LedMode(m) => self.settings.led_mode = m,
             Message::Rgb(i, v) => self.settings.rgb[i] = v,
             Message::Preset(c) => self.settings.rgb = c,
@@ -341,8 +427,10 @@ impl App {
                 let wanted = self.visible
                     && self.settings.auto_refresh
                     && self.page == Page::Performance
-                    && !self.sampling;
-                if wanted {
+                    && self.perf_tab == PerfTab::Overview;
+                if !wanted {
+                    self.stop_sampling();
+                } else if !self.sampling {
                     self.sampling = true;
                     let reader = Arc::clone(&self.reader);
                     let ready = self.helper.is_ready();
@@ -367,6 +455,13 @@ impl App {
                 if let Some(w) = s.gpu_watts {
                     push(&mut self.history[3], w);
                 }
+                if let Some(u) = s.cpu_usage {
+                    push(&mut self.history[4], u);
+                }
+                if let Some(u) = s.gpu_usage {
+                    push(&mut self.history[5], u);
+                }
+                push(&mut self.history[6], s.mem_percent());
                 if let Some(e) = &s.error {
                     self.last_acpi = format!("error: {e}");
                 }
@@ -409,6 +504,7 @@ impl App {
             Message::CloseRequested(id) => {
                 if self.settings.close_to_tray && self.tray_ok {
                     self.visible = false;
+                    self.stop_sampling();
                     return window::set_mode(id, window::Mode::Hidden);
                 }
                 return iced::exit();

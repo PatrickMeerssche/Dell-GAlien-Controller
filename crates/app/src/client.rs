@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
 
-use dell5530_proto::{Fan, Reply, Request, SOCKET_PATH};
+use dell5530_proto::{Fan, Governor, Reply, Request, SOCKET_PATH};
 
 use crate::settings::PowerMode;
 
@@ -58,6 +58,14 @@ pub fn set_power_mode(mode: PowerMode) -> Result<String, String> {
         }
     }
     Ok(msg)
+}
+
+pub fn set_governor(g: Governor) -> Result<(), String> {
+    call(Request::SetGovernor(g)).map(|_| ())
+}
+
+pub fn set_nvidia_powerd(on: bool) -> Result<(), String> {
+    call(Request::SetNvidiaPowerd(on)).map(|_| ())
 }
 
 pub fn set_fan_boost(fan: Fan, value: u8) -> Result<String, String> {

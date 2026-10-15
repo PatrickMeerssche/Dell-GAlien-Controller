@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::fs::{chown, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::thread;
 
@@ -57,7 +58,48 @@ fn rapl_energy() -> (u64, u64) {
     (energy, max)
 }
 
+fn set_governor(name: &str) -> Reply {
+    let Ok(dir) = fs::read_dir("/sys/devices/system/cpu") else {
+        return Reply::Err("cpufreq not available".into());
+    };
+    let mut count = 0;
+    for entry in dir.flatten() {
+        let file = entry.file_name();
+        let file = file.to_string_lossy();
+        let is_cpu = file.strip_prefix("cpu").is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        if !is_cpu {
+            continue;
+        }
+        let path = entry.path().join("cpufreq/scaling_governor");
+        if path.exists() {
+            if let Err(e) = fs::write(&path, name) {
+                return Reply::Err(format!("{}: {e}", path.display()));
+            }
+            count += 1;
+        }
+    }
+    if count == 0 {
+        Reply::Err("cpufreq not available".into())
+    } else {
+        Reply::Ok(vec![count])
+    }
+}
+
+fn set_nvidia_powerd(on: bool) -> Reply {
+    let action = if on { "start" } else { "stop" };
+    match Command::new("/usr/bin/systemctl").args([action, "nvidia-powerd.service"]).output() {
+        Ok(o) if o.status.success() => Reply::Ok(vec![u64::from(on)]),
+        Ok(o) => Reply::Err(String::from_utf8_lossy(&o.stderr).trim().to_string()),
+        Err(e) => Reply::Err(format!("systemctl failed: {e}")),
+    }
+}
+
 fn handle_request(req: Request) -> Reply {
+    match req {
+        Request::SetGovernor(g) => return set_governor(g.name()),
+        Request::SetNvidiaPowerd(on) => return set_nvidia_powerd(on),
+        _ => {}
+    }
     let mut out = Vec::new();
     for call in req.acpi_calls() {
         match acpi(&call.to_acpi_string()) {

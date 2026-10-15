@@ -8,7 +8,9 @@ use iced::{
 };
 
 use crate::settings::{Accent, Brightness, LedMode, PowerMode};
-use crate::{App, Helper, Message, Page};
+use crate::tuning::PowerMizer;
+use crate::{App, Helper, Message, Page, PerfTab};
+use dell5530_proto::Governor;
 
 const DIM: Color = Color::from_rgb(0.54, 0.58, 0.65);
 const PRESETS: [[u8; 3]; 9] = [
@@ -290,9 +292,107 @@ fn lighting(app: &App) -> Element<'_, Message> {
     .into()
 }
 
+fn perf_tab_label(t: PerfTab) -> &'static str {
+    match t {
+        PerfTab::Overview => "Overview",
+        PerfTab::Nvidia => "Nvidia",
+        PerfTab::CoreCtrl => "CoreCtrl",
+    }
+}
+
 fn performance(app: &App) -> Element<'_, Message> {
+    let tabs = segmented(
+        &[PerfTab::Overview, PerfTab::Nvidia, PerfTab::CoreCtrl],
+        app.perf_tab,
+        perf_tab_label,
+        Message::PerfTab,
+    );
+    let body = match app.perf_tab {
+        PerfTab::Overview => overview(app),
+        PerfTab::Nvidia => nvidia(app),
+        PerfTab::CoreCtrl => corectrl(app),
+    };
+    column![text("Performance").size(26), tabs, body].spacing(16).into()
+}
+
+fn status_line(app: &App) -> Element<'_, Message> {
+    text(&app.tuning_status).size(13).color(DIM).into()
+}
+
+fn option_button<'a>(label: &'static str, blurb: &'static str, selected: bool, msg: Message) -> Element<'a, Message> {
+    button(column![text(label).size(15), text(blurb).size(11).color(DIM)].spacing(2))
+        .width(Length::Fill)
+        .padding([10, 14])
+        .style(chip(selected))
+        .on_press(msg)
+        .into()
+}
+
+fn nvidia(app: &App) -> Element<'_, Message> {
+    let t = &app.tuning;
+    let (current, err) = match &t.powermizer {
+        Some(Ok(m)) => (Some(*m), None),
+        Some(Err(e)) => (None, Some(e.clone())),
+        None => (None, None),
+    };
+    let mut mizer = column![
+        heading("POWERMIZER MODE"),
+        row(PowerMizer::ALL.iter().map(|&m| option_button(
+            m.label(),
+            m.blurb(),
+            current == Some(m),
+            Message::SetPowerMizer(m)
+        )))
+        .spacing(10),
+    ]
+    .spacing(10);
+    if let Some(e) = err {
+        mizer = mizer.push(text(format!("Unavailable: {e} (needs nvidia-settings and an X11 session)")).size(13).color(DIM));
+    }
+
+    let powerd = match t.powerd {
+        Some(on) => row![
+            option_button("On", "Dynamic Boost running", on, Message::SetPowerd(true)),
+            option_button("Off", "Service stopped", !on, Message::SetPowerd(false)),
+        ]
+        .spacing(10),
+        None => row![text("nvidia-powerd service not found").size(13).color(DIM)],
+    };
+    let mut powerd_col = column![heading("NVIDIA-POWERD (DYNAMIC BOOST)"), powerd].spacing(10);
+    if !app.helper.is_ready() {
+        powerd_col = powerd_col.push(text("Changing the service needs the root helper (sudo ./install.sh).").size(13).color(DIM));
+    }
+
+    column![panel(mizer), panel(powerd_col), status_line(app)].spacing(16).into()
+}
+
+fn corectrl(app: &App) -> Element<'_, Message> {
+    let t = &app.tuning;
+    let current = match t.governor {
+        Some(g) => g.name().to_string(),
+        None => "unknown".into(),
+    };
+    let driver = t.scaling_driver.clone().unwrap_or_else(|| "unknown".into());
+    let gov = column![
+        heading("CPU FREQUENCY GOVERNOR"),
+        row![
+            option_button("Powersave", "Scale clocks with load", t.governor == Some(Governor::Powersave), Message::SetGovernor(Governor::Powersave)),
+            option_button("Performance", "Favor high clocks", t.governor == Some(Governor::Performance), Message::SetGovernor(Governor::Performance)),
+        ]
+        .spacing(10),
+        text(format!("Current: {current}   Driver: {driver}")).size(13).color(DIM),
+    ]
+    .spacing(10);
+    let mut page = column![panel(gov), status_line(app)].spacing(16);
+    if !app.helper.is_ready() {
+        page = page.push(text("Changing the governor needs the root helper (sudo ./install.sh).").size(13).color(DIM));
+    }
+    page.into()
+}
+
+fn overview(app: &App) -> Element<'_, Message> {
     let s = &app.settings;
-    let mut page = column![text("Performance").size(26)].spacing(16);
+    let mut page = column![].spacing(16);
 
     match &app.helper {
         Helper::Ready(_) => {
@@ -362,22 +462,32 @@ fn performance(app: &App) -> Element<'_, Message> {
     let watts = |v: Option<f32>| v.map_or("N/A".into(), |w| format!("{w:.1} W"));
     let rpm = |v: Option<u32>| if ready { v.map_or("--".into(), |r| format!("{r} RPM")) } else { "N/A".into() };
 
+    let pct = |v: Option<f32>| v.map_or("N/A".into(), |u| format!("{u:.0} %"));
+    let mem = sample.map_or(("--".into(), "".into()), |x| {
+        (format!("{:.0} %", x.mem_percent()), format!("{:.1} / {:.1} GB", x.mem_used_gb, x.mem_total_gb))
+    });
+    let pr = Some((0.0, 100.0));
+    let third = || Space::new().width(Length::Fill);
+
     let grid = column![
         row![
-            metric("CPU TEMP", temp(sample.map(|x| x.cpu_temp)), rpm(sample.map(|x| x.cpu_rpm)), &app.history[0], accent),
-            metric("GPU TEMP", temp(sample.map(|x| x.gpu_temp)), rpm(sample.map(|x| x.gpu_rpm)), &app.history[1], accent),
+            metric("CPU TEMP", temp(sample.map(|x| x.cpu_temp)), rpm(sample.map(|x| x.cpu_rpm)), &app.history[0], accent, None),
+            metric("CPU USAGE", pct(sample.and_then(|x| x.cpu_usage)), "All cores".into(), &app.history[4], accent, pr),
+            metric("CPU POWER", watts(sample.and_then(|x| x.cpu_watts)), "Package".into(), &app.history[2], accent, None),
         ]
         .spacing(16),
         row![
-            metric("CPU POWER", watts(sample.and_then(|x| x.cpu_watts)), "Package".into(), &app.history[2], accent),
-            metric("GPU POWER", watts(sample.and_then(|x| x.gpu_watts)), "Board".into(), &app.history[3], accent),
+            metric("GPU TEMP", temp(sample.map(|x| x.gpu_temp)), rpm(sample.map(|x| x.gpu_rpm)), &app.history[1], accent, None),
+            metric("GPU USAGE", pct(sample.and_then(|x| x.gpu_usage)), "Utilization".into(), &app.history[5], accent, pr),
+            metric("GPU POWER", watts(sample.and_then(|x| x.gpu_watts)), "Board".into(), &app.history[3], accent, None),
         ]
         .spacing(16),
+        row![metric("MEMORY", mem.0, mem.1, &app.history[6], accent, pr), third(), third()].spacing(16),
     ]
     .spacing(16);
 
     page = page.push(heading("LIVE SENSORS")).push(grid);
-    scrollable(page.padding([0, 12])).into()
+    scrollable(page.padding([0, 12])).height(Length::Fill).into()
 }
 
 fn metric<'a>(
@@ -386,13 +496,14 @@ fn metric<'a>(
     sub: String,
     data: &'a VecDeque<f32>,
     color: Color,
+    range: Option<(f32, f32)>,
 ) -> Element<'a, Message> {
     panel(
         column![
             heading(title),
             text(value).size(28),
             text(sub).size(12).color(DIM),
-            canvas(Spark { data, color }).width(Length::Fill).height(54),
+            canvas(Spark { data, color, range }).width(Length::Fill).height(54),
         ]
         .spacing(4),
     )
@@ -402,6 +513,7 @@ fn metric<'a>(
 struct Spark<'a> {
     data: &'a VecDeque<f32>,
     color: Color,
+    range: Option<(f32, f32)>,
 }
 
 impl<Message> canvas::Program<Message> for Spark<'_> {
@@ -425,8 +537,13 @@ impl<Message> canvas::Program<Message> for Spark<'_> {
         if self.data.len() >= 2 {
             let min = self.data.iter().copied().fold(f32::MAX, f32::min);
             let max = self.data.iter().copied().fold(f32::MIN, f32::max);
-            let span = (max - min).max(10.0);
-            let lo = min - (span - (max - min)) / 2.0;
+            let (lo, span) = match self.range {
+                Some((lo, hi)) => (lo, hi - lo),
+                None => {
+                    let span = (max - min).max(10.0);
+                    (min - (span - (max - min)) / 2.0, span)
+                }
+            };
             let step = w / (super::HISTORY - 1) as f32;
             let x0 = w - step * (self.data.len() - 1) as f32;
             let pt = |i: usize, v: f32| Point::new(x0 + step * i as f32, h - 3.0 - (v - lo) / span * (h - 6.0));

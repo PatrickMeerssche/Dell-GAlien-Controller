@@ -40,6 +40,28 @@ impl Fan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Governor {
+    Powersave,
+    Performance,
+}
+
+impl Governor {
+    pub fn name(self) -> &'static str {
+        match self {
+            Governor::Powersave => "powersave",
+            Governor::Performance => "performance",
+        }
+    }
+    fn parse(s: &str) -> Option<Self> {
+        match s {
+            "powersave" => Some(Governor::Powersave),
+            "performance" => Some(Governor::Performance),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Request {
     Model,
     GetPowerMode,
@@ -51,6 +73,10 @@ pub enum Request {
     /// Replies with `[cpu_temp, gpu_temp, cpu_rpm, gpu_rpm, energy_uj, energy_max_uj]`;
     /// the energy values are 0 when RAPL is unavailable.
     Snapshot,
+    /// Sets the cpufreq governor on every CPU.
+    SetGovernor(Governor),
+    /// Starts or stops `nvidia-powerd.service`.
+    SetNvidiaPowerd(bool),
 }
 
 /// One WMAX call: `\_SB.AMWW.WMAX 0 <cmd> {a, b, c, 0x00}`.
@@ -90,6 +116,7 @@ impl Request {
                 AcpiCall::new(0x14, 0x05, Fan::Cpu.id(), 0x00),
                 AcpiCall::new(0x14, 0x05, Fan::Gpu.id(), 0x00),
             ],
+            Request::SetGovernor(_) | Request::SetNvidiaPowerd(_) => Vec::new(),
         }
     }
 
@@ -103,6 +130,8 @@ impl Request {
             Request::GetFanBoost(f) => format!("get_fan_boost {}", f.name()),
             Request::SetFanBoost(f, v) => format!("set_fan_boost {} {v}", f.name()),
             Request::Snapshot => "snapshot".into(),
+            Request::SetGovernor(g) => format!("set_governor {}", g.name()),
+            Request::SetNvidiaPowerd(on) => format!("set_nvidia_powerd {}", u8::from(on)),
         }
     }
 
@@ -119,6 +148,12 @@ impl Request {
                 Request::SetFanBoost(Fan::parse(it.next()?)?, it.next()?.parse().ok()?)
             }
             "snapshot" => Request::Snapshot,
+            "set_governor" => Request::SetGovernor(Governor::parse(it.next()?)?),
+            "set_nvidia_powerd" => Request::SetNvidiaPowerd(match it.next()? {
+                "1" => true,
+                "0" => false,
+                _ => return None,
+            }),
             _ => return None,
         };
         it.next().is_none().then_some(req)
@@ -184,6 +219,8 @@ mod tests {
             Request::SetFanBoost(Fan::Gpu, 200),
             Request::GetFanBoost(Fan::Cpu),
             Request::Snapshot,
+            Request::SetGovernor(Governor::Powersave),
+            Request::SetNvidiaPowerd(false),
         ] {
             assert_eq!(Request::decode(&r.encode()), Some(r));
         }
