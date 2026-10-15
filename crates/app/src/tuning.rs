@@ -123,6 +123,38 @@ pub fn powerd_active() -> Option<bool> {
     }
 }
 
+/// Name of the matching power-profiles-daemon profile (the Ubuntu power mode).
+fn ppd_profile(g: Governor) -> &'static str {
+    match g {
+        Governor::Powersave => "power-saver",
+        Governor::Performance => "performance",
+    }
+}
+
+pub fn power_profile_get() -> Option<String> {
+    let out = Command::new("powerprofilesctl").arg("get").output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+fn power_profile_set(g: Governor) -> Result<(), String> {
+    let out = Command::new("powerprofilesctl")
+        .args(["set", ppd_profile(g)])
+        .output()
+        .map_err(|e| format!("powerprofilesctl not available: {e}"))?;
+    if out.status.success() {
+        Ok(())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+    }
+}
+
+/// Sets the Ubuntu power profile first so the governor written afterwards is the one that sticks.
+pub fn apply_governor(g: Governor) -> Result<(), String> {
+    let profile = power_profile_set(g);
+    crate::client::set_governor(g)?;
+    profile.map_err(|e| format!("governor set, but the Ubuntu power profile failed: {e}"))
+}
+
 pub fn governor_get() -> Option<Governor> {
     let g = fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok()?;
     match g.trim() {
@@ -137,6 +169,7 @@ pub struct Snapshot {
     pub powerd: Option<bool>,
     pub governor: Option<Governor>,
     pub epp: Option<String>,
+    pub power_profile: Option<String>,
     pub scaling_driver: Option<String>,
 }
 
@@ -148,6 +181,7 @@ pub fn snapshot() -> Snapshot {
         powerd: powerd_active(),
         governor: governor_get(),
         epp: cpu0("energy_performance_preference"),
+        power_profile: power_profile_get(),
         scaling_driver: cpu0("scaling_driver"),
     }
 }

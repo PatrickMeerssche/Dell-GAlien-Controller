@@ -321,7 +321,7 @@ impl App {
             }
             Message::SetGovernor(g) => {
                 self.tuning_status = format!("Setting governor to {}...", g.name());
-                return Task::perform(blocking(move || client::set_governor(g)), Message::GovernorDone);
+                return Task::perform(blocking(move || tuning::apply_governor(g)), Message::GovernorDone);
             }
             Message::GovernorDone(r) => {
                 self.tuning_status = match r {

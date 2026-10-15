@@ -368,14 +368,15 @@ fn corectrl(app: &App) -> Element<'_, Message> {
     };
     let driver = t.scaling_driver.clone().unwrap_or_else(|| "unknown".into());
     let epp = t.epp.clone().unwrap_or_else(|| "n/a".into());
+    let profile = t.power_profile.clone().unwrap_or_else(|| "n/a".into());
     let gov = column![
-        heading("CPU FREQUENCY GOVERNOR"),
+        heading("CPU FREQUENCY GOVERNOR (ALSO SETS THE UBUNTU POWER MODE)"),
         row![
             option_button("Powersave", "Scale clocks with load", t.governor == Some(Governor::Powersave), Message::SetGovernor(Governor::Powersave)),
             option_button("Performance", "Favor high clocks", t.governor == Some(Governor::Performance), Message::SetGovernor(Governor::Performance)),
         ]
         .spacing(10),
-        text(format!("Current: {current}   EPP: {epp}   Driver: {driver}")).size(13).color(DIM),
+        text(format!("Current: {current}   EPP: {epp}   Driver: {driver}   Ubuntu power mode: {profile}")).size(13).color(DIM),
     ]
     .spacing(10);
     let mut page = column![panel(gov), status_line(app)].spacing(16);

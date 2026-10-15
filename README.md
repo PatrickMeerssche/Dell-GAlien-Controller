@@ -7,7 +7,7 @@ A **Dell G15 5530**-focused **Linux** controller app, written in Rust with [iced
 - **Manual fan boost**: per-fan boost for the CPU and GPU fans
 - **Live sensors**: CPU/GPU temperature, usage and power, fan RPM and memory usage with sparklines
 - **Nvidia tab**: PowerMizer mode (Auto, Normal, Performance), held through an open NV-CONTROL connection and an on/off switch for `nvidia-powerd`
-- **CoreCtrl tab**: CPU frequency governor (Powersave or Performance), set directly through cpufreq
+- **CoreCtrl tab**: CPU frequency governor (Powersave or Performance), set directly through cpufreq; it also switches the Ubuntu power mode (power-saver or performance) via `powerprofilesctl`
 - **System tray**: click the tray icon to toggle the keyboard LEDs
 - **Diagnostics**: helper state, detected model, LED firmware and last results
 
